@@ -1,0 +1,210 @@
+Neste capítulo vamos executar comandos Sql no Java.
+
+
+Agora que já sabemos abrir uma conexão, podemos escrever Scipt SQL, ou seja, fazer as operações que um banco de dados faz.
+Sabemos que no banco de dados já um produto cadastrado, então vamos listar esse cadastro com o comando select. Para isso siga os
+passos a passo:
+
+1) Crie a clase TestaListagem com o método main();
+
+2) Cris o código capaz de abrir um conexão (vimos no primeiro capítulo), o código é:
+
+	public static void main(String[] args) throws SQLException {
+		
+		// O primeiro parametro do método getConnection é o endereço do banco com o
+		// padrão de horário,
+		// o segundo é o usuário e o terceiro é a senha.
+		Connection connection = DriverManager.getConnection(
+				"jdbc:mysql://localhost/loja_virtual?useTimezone=true&serverTimezone=UTC", "root", "mysql");
+
+		System.out.println("Rodou!");
+		
+		//Fecha a Conexão
+		connection.close();
+		
+	}
+	
+3) O código para fazer operação são chamados de Statement e devem ser executados antes de fechar a conexão com o banco.
+Ao executar um Statement temos um retorno do tipo boolean, onde será verdadeiro quano temos retorno do banco de dados (operação de
+listagem faz isso) ou falso quando não há retorno (operação de Deleção, autualização faz isso).
+Para conseguir pegar os valores salvos no banco devemos chamar o método getResult() do Statement e o retorno será do tipo ResultSet.
+Agora basta extrair do ResultSet os valores de cada coluna, podemos acessar os valores da coluna passando o index da coluna (a 
+primeira é 1) ou passando o nome da coluna. Veja como ficou:
+
+	public class TestaListagem {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			// O primeiro parametro do método getConnection é o endereço do banco com o
+			// padrão de horário,
+			// o segundo é o usuário e o terceiro é a senha.
+			Connection connection = DriverManager.getConnection(
+					"jdbc:mysql://localhost/loja_virtual?useTimezone=true&serverTimezone=UTC", "root", "mysql");
+
+			System.out.println("Rodou!");
+			
+			Statement stm = connection.createStatement();
+			//O método execute retorna true quando há retorno de listagem e false quando não tem
+			//Por exemplo, update, delete não há retorno!
+			boolean resultado = stm.execute("SELECT ID, NOME, DESCRICAO FROM PRODUTO");
+			//Para pegar de fato a listagem retornada, no caso os dados salvos no banco.
+			ResultSet rst = stm.getResultSet();
+			//Listando os itens que foi retornado na consulta. Sempre verificamos se há o próximo
+			while(rst.next()) {
+				//Podemos acessar valor da coluna via index ( começa em 1) ou pelo nome da coluna.
+				Integer id = rst.getInt("ID");
+				String nome = rst.getString("NOME");
+				String descricao = rst.getString("DESCRICAO");
+				
+				System.out.println(id + " " + nome + " " + descricao );
+			}
+			
+			//Fecha a Conexão
+			connection.close();
+			
+		}
+		
+	}
+	
+
+Tudo funciona normalmente, mas se continuarmos fazendo assim, vamos estar fazendo uma conexão por classe/operação e isso não é boa
+prática! Imagina se um dia mudarmos a senha do banco, teremos muito trabalho. Vamos fazer uma classe criar a conexão. Siga os passos:
+
+1) Crie a classe CriaConexao;
+
+2) Nesta classe crie o método recuperaConexao() que vai retornar uma Connection, ficará assim:
+
+	public class CriaConexao {
+
+		public Connection recuperarConexao() throws SQLException {
+
+
+			Connection connection = DriverManager.getConnection(
+					"jdbc:mysql://localhost/loja_virtual?useTimezone=true&serverTimezone=UTC", "root", "mysql");
+			
+			return connection;
+		}
+
+	}
+	
+3) Agora na classe TestaListagem podemos tirar o trecho que cria uma Connection e chamar o método desta classe que criamos, ficando 
+assim:
+
+	CriaConexao criaConexao = new CriaConexao();
+	Connection connection = criaConexao.recuperarConexao();
+	
+Agora se um dia tivermos que mudar algo de conexão basta mudar na classe  CriaConexao. Essa classe usa o padrão Factory, por isso
+é comum tem em seu nome a palavra Factory. Vamos renomear essa classe para ConnectionFactory.
+
+
+Vamos agorar fazer a inserção de dados no banco de dados, pois o primeiro produto foi salvo via terminal. Para isso siga os passos:
+
+1) Crie a classe TestaInsercao e o método main();
+
+2) Vamos criar a conexão através da classe ConnectionFactory;
+
+3) Vamos criar um Statement com o comando insert e forçar o retorno da chave primária do item salvo, assim podemos pegar a chave
+gerada.
+
+4) Veja como ficou a classe:
+
+	public class TestaInsercao {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory criaConexao = new ConnectionFactory();
+			Connection connection = criaConexao.recuperarConexao();
+			
+			Statement stm = connection.createStatement();
+			//Executando um INSERT no banco. O segundo argumento do metodo execute faz retornar o ID do item salvo.
+			stm.execute("INSERT INTO PRODUTO(NOME, DESCRICAO) VALUES('MOUSE', 'MOUSE SEM FIO')", 			
+			Statement.RETURN_GENERATED_KEYS);
+			
+			//Pegando o ID do item criado
+			ResultSet rs = stm.getGeneratedKeys();
+			while(rs.next()) {
+				//Pegando o valor via index.
+				Integer id = rs.getInt(1);
+				System.out.println("Foi criado o produto com id: " + id);
+			}
+			
+
+		}
+
+	}
+
+
+Agora vamos fazer a deleção de um item do banco de dados. Para isso siga os passos:
+
+1) Crie a classe TestaRemocao e seu método main();
+
+2) Vamos criar a conexão através da classe ConnectionFactory;
+
+3) Vamos criar um Statement com o comando delete e como queremos deixar apenas o produto com id = 1 vamos deletar todos que são 
+diferentes;
+
+4) Para verificar se funcionou, podemos usar o método getUpdateCount() do Statement, esse retorna a quantidade de linahs modificadas
+no banco de dados;
+
+5) Veja como ficou a classe:
+
+	public class TestaRemocao {
+
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory criaConexao = new ConnectionFactory();
+			Connection connection = criaConexao.recuperarConexao();
+			
+			Statement stm = connection.createStatement();
+			//Executando um DELETE
+			stm.execute("DELETE FROM PRODUTO WHERE id > 1");
+			
+			//Verifica quantas linhas (itens) foram alterados/deletados após executar Statement.
+			Integer contador = stm.getUpdateCount();
+			System.out.println("Foram deletados " + contador + " produtos.");
+			
+			//FEchando conexão
+			connection.close();
+			
+		}
+		
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

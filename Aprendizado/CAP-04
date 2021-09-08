@@ -1,0 +1,203 @@
+Neste capítulo falamos sobre Transação.
+
+
+Vamos alterar a classe de inserção (ciramos outra), ela chamará o método adicionarVariavel(), será esse método que vai adicionar um
+novo item no banco. Veja como ficou:
+
+	public class TestaInsercaoComTransacao {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory criaConexao = new ConnectionFactory();
+			Connection connection = criaConexao.recuperarConexao();
+			
+			//Criamos um PrepareStatment com o comando INSERT. Veja que os valores são representados por INTERROGAÇÃO.
+			//O segundo argumento do metodo execute faz retornar o ID do item criado/salvo.
+			PreparedStatement pst = connection.prepareStatement("INSERT INTO PRODUTO(NOME, DESCRICAO) VALUES(?, ?)", 
+			Statement.RETURN_GENERATED_KEYS);
+
+			adicionarVariavel("mouse", "mouse sem fio", pst);
+			adicionarVariavel("teclado", "teclado sem fio", pst);
+			
+			//Fechando a connection
+			connection.close();
+			
+		}
+
+		private static void adicionarVariavel(String nome, String descricao, PreparedStatement pst) throws SQLException {
+			//Terminar de preparar o PreparedStatement. Vamos trocar as INTERROGAÇÕES por VALORES
+			//O primeiro argumento representa o index (posição) da interrogação. O segundo argumento é o valor.
+			pst.setString(1, nome);
+			pst.setString(2, descricao);
+			
+			if(nome.equals("teclado")) {
+				throw new RuntimeException("Forçando esse erro!");
+			}
+			
+			//Executando o PreparedStatement
+			pst.execute();
+			
+			//Pegando o ID do item criado
+			ResultSet rs = pst.getGeneratedKeys();
+			while(rs.next()) {
+				//Pegando o valor via index.
+				Integer id = rs.getInt(1);
+				System.out.println("Foi criado o produto com id: " + id);
+			}
+			
+			//FEchando o ResultSet
+			rs.close();
+
+		}
+
+	}
+	
+Veja que ao tentar adicionar um produto com nome teclado vamos lançar uma Exception de propósito! E vamos ver que o item mouse foi
+salvo, pois para cada inserção está sendo criado uma Transação. Se quisermos alterar esse comportamento devemos alterar o autoCommit
+da conexão. Podemos forçar que no nosso exemplo devemos salvar os dois itens ou nenhum (caso de erro, fazer rollback!). Veja como
+fazer isso:
+
+		connection.setAutoCommit(false);
+		
+Mas ao fazer isso teremos que fazer o commit em toda mudaça do banco! E queremos dar commit() apenas se for possível adicionar os
+dois itens, caso contrário vamos dar um rollback(). Veja como fizemos isso:
+
+
+public class TestaInsercaoComTransacao {
+	
+	public static void main(String[] args) throws SQLException {
+		
+		ConnectionFactory criaConexao = new ConnectionFactory();
+		Connection connection = criaConexao.recuperarConexao();
+		//False para podermos manipular a transação.
+		connection.setAutoCommit(false);
+		
+		
+		try {
+			//Criamos um PrepareStatment com o comando INSERT. Veja que os valores são representados por INTERROGAÇÃO.
+			//O segundo argumento do metodo execute faz retornar o ID do item criado/salvo.
+			PreparedStatement pst = connection.prepareStatement("INSERT INTO PRODUTO(NOME, DESCRICAO) VALUES(?, ?)", 
+			Statement.RETURN_GENERATED_KEYS);
+			
+			//Por padrão, cada inserção está sendo feito por uma transação diferente!
+			//Quando da erro no item teclado o item mouse já foi salvo!
+			//Quando queremos controlar isso, devemos alterar na conexao o setAutoCommit() para falso.
+			//Dai poderemos forçar que ou salva os dois ou nenhum (rollback)!
+			adicionarVariavel("mouse", "mouse sem fio", pst);
+			adicionarVariavel("teclado", "teclado sem fio", pst);
+			
+			//Se depois de adicionar os dois itens sem erro eu posso commitar!
+			connection.commit();
+			
+			//Fechando a connection
+			connection.close();
+		}catch (Exception e) {
+			e.printStackTrace();
+			System.out.println("Vamos dar o rollback");
+			//Caso houver Exception, vamos retronar tudo com rollback
+			connection.rollback();
+		}
+
+		
+	}
+
+	private static void adicionarVariavel(String nome, String descricao, PreparedStatement pst) throws SQLException {
+		//Terminar de preparar o PreparedStatement. Vamos trocar as INTERROGAÇÕES por VALORES
+		//O primeiro argumento representa o index (posição) da interrogação. O segundo argumento é o valor.
+		pst.setString(1, nome);
+		pst.setString(2, descricao);
+		
+		if(nome.equals("teclado")) {
+			throw new RuntimeException("Forçando esse erro!");
+		}
+		
+		//Executando o PreparedStatement
+		pst.execute();
+		
+		//Pegando o ID do item criado
+		ResultSet rs = pst.getGeneratedKeys();
+		while(rs.next()) {
+			//Pegando o valor via index.
+			Integer id = rs.getInt(1);
+			System.out.println("Foi criado o produto com id: " + id);
+		}
+		
+		//Fechando o ResultSet
+		rs.close();
+	}
+
+}
+
+
+Podemos melhorar nosso código! Temos que fechar a conexão, o nosso resultset e o PreparedStatement! E teremos que fechar isso 
+dentro do try e também do catch! Então podemos usar o try-with-resources, pois todas essas classes/interfaces são AutoCloseable! 
+Tenha em mente que para usar esse try, basta colocar o código que cria o AutoCloseable entre parenteses. Veja como vai ficar o 
+cóldigo:
+
+public class TestaInsercaoComTransacao {
+
+	public static void main(String[] args) throws SQLException {
+
+		ConnectionFactory criaConexao = new ConnectionFactory();
+		try (Connection connection = criaConexao.recuperarConexao()) {
+
+			// False para podermos manipular a transação.
+			connection.setAutoCommit(false);
+
+			// Criamos um PrepareStatment com o comando INSERT. Veja que os valores são
+			// representados por INTERROGAÇÃO.
+			// O segundo argumento do metodo execute faz retornar o ID do item criado/salvo.
+			try (PreparedStatement pst = connection.prepareStatement(
+					"INSERT INTO PRODUTO(NOME, DESCRICAO) VALUES(?, ?)", Statement.RETURN_GENERATED_KEYS);) {
+
+				// Por padrão, cada inserção está sendo feito por uma transação diferente!
+				// Quando da erro no item teclado o item mouse já foi salvo!
+				// Quando queremos controlar isso, devemos alterar na conexao o setAutoCommit()
+				// para falso.
+				// Dai poderemos forçar que ou salva os dois ou nenhum (rollback)!
+				adicionarVariavel("mouse", "mouse sem fio", pst);
+				adicionarVariavel("teclado", "teclado sem fio", pst);
+
+				// Se depois de adicionar os dois itens sem erro eu posso commitar!
+				connection.commit();
+
+				// Fechando a connection
+				connection.close();
+			} catch (Exception e) {
+				e.printStackTrace();
+				System.out.println("Vamos dar o rollback");
+				// Caso houver Exception, vamos retronar tudo com rollback
+				connection.rollback();
+			}
+		}
+	}
+
+	private static void adicionarVariavel(String nome, String descricao, PreparedStatement pst) throws SQLException {
+		// Terminar de preparar o PreparedStatement. Vamos trocar as INTERROGAÇÕES por
+		// VALORES
+		// O primeiro argumento representa o index (posição) da interrogação. O segundo
+		// argumento é o valor.
+		pst.setString(1, nome);
+		pst.setString(2, descricao);
+
+		if (nome.equals("teclado")) {
+			throw new RuntimeException("Forçando esse erro!");
+		}
+
+		// Executando o PreparedStatement
+		pst.execute();
+
+		// Pegando o ID do item criado
+		try (ResultSet rs = pst.getGeneratedKeys()) {
+
+			while (rs.next()) {
+				// Pegando o valor via index.
+				Integer id = rs.getInt(1);
+				System.out.println("Foi criado o produto com id: " + id);
+			}
+
+		}
+	}
+
+}
+

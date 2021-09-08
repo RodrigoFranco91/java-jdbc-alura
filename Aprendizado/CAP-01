@@ -1,0 +1,61 @@
+Neste capítulo nós instalamos o MySql e aprendemos o que é JDBC e o padrão Factory.
+
+
+Após instalar o MySql criamos a base de dados: loja_vitual. Ou seja, rodamos os comandos:
+
+	mysql -u root -p (para logar no mysql)
+	CREATE DATABASE loja_virtual; (para criar a base de dados)
+	
+Depois criamos a tabela produto e inserimos um produto, fizemos isso com os comandos:
+
+	CREATE TABLE PRODUTO(id INT AUTO_INCREMENT, nome VARCHAR(50) NOT NULL, descricao VARCHAR(255), PRIMARY KEY (id)) Engine=
+	InnoDB; (cria a tablea produto)
+	
+	CREATE TABLE PRODUTO(id INT AUTO_INCREMENT, nome VARCHAR(50) NOT NULL, descricao VARCHAR(255), PRIMARY KEY (id)) Engine= 
+	InnoDB;
+	
+	
+Agora vamos fazer vamos fazer o nosso programa Java conversar com essa base de dados e para isso vamos usar o JDBC!
+
+O Java e o banco de dados, neste caso MySql, não sabem conversar, "cada um fala um idioma", mas o criados do MySql (todos possuem) 
+criou uma biblioteca (arquivo JAR) que permite uma aplicação Java conversar com o MySql. Esse arquivo JAR se chama Driver MySql Java.
+Se no futuro mudarmos o MySql para SqlServer (outra base de dados), só vamos precisar trocar o Driver MySql Java pelo Driver Sql
+Server Java. Essa troca é fácil/simplificada, pois existe uma camada de abstração, que chamamos de JDBC que fica entre a aplicação e
+o Driver do banco de dados. O JDBC (Java Database Connectivity) define as regras (interfaces) e os Drivers implementam, logo toda
+implementação segue a mesma regra (mesmo que a implementação seja diferente). 
+
+O pacote do JDBC é java.sql.*, logo devemos sempre usar esse pacote.
+
+Tenha em mente que JDBC é uma específicação Java, ou seja, não implementa nada, mas determina regras que as implementaçÕes devem ter.
+
+Veja o desenho:
+
+	Aplicação JAva <===> JDBC <====> Driver MySql <====> Base de Dados MySql (Bando de Dados)
+		
+		
+Vamos criar um Projeto Java chamado loja-virtual-repository e fazer esse se conectar com o Banco de Dados. Para isso siga os passos:
+
+1) Crie a classe TestaConexao e crie seu método main();
+
+2) Devemos criar uma variavel do tipo Connection, para isso fizemos:
+
+		Connection connection = DriverManager
+				.getConnection("jdbc:mysql://localhost/loja_virtual?useTimezone=true&serverTimezone=UTC", "root", 
+				"mysql");
+			
+Criar uma Connection pode ocorrer muitos erros, como banco offline, banco não encontrado, então temos que tratar a exceção ou 
+lançá-la para cima (throws)
+
+O primeiro parametro do método getConnection é o endereço do banco com o padrão de horário, o segundo é o usuário e o terceiro é a
+senha.
+
+3) Tenha em mente que tudo que abrimos (sessão, transação e conexão) temos que fechar. Para isso fizemos o código:
+
+	connection.close();
+	
+4) Por fim devemos adicionar o JAR do Driver MySql no projeto. Podemos fazer isso criando uma pasta Lib no projeto e depois  
+adicionando no Build Path, mas vamos fazer isso de modo mais direto, basta clicar botão direito no projeto -> Build Path ->
+Add External Archives -> selecionar o JAR
+	
+
+	

@@ -1,0 +1,66 @@
+Neste capítulo falamos sobre pool de conexões:
+
+
+Hoje a nossa aplicação está assim:
+
+Classe com método main() <===> ConnectionFactory <===> JDBC <===> Driver MySql <===> Banco de Dados.
+
+E até o momento temos apenas uma conexão! Na vida real isso não serveria, pense em uma aplicação web real, com diversos usuários, não
+seria possível a aplicação receber mais de um requisição ao mesmo tempo, tendo uma conexão apenas um usuário vai poder usar a aplicação
+e quando ele terminar, o próximo usuário terá o acesso, ou seja, teremos uma fila de usuário!
+
+Uma solução seria para cada requisição criar uma conexão! Mas se a quantidade de usuário for grande isso vai derrubar o banco, pois
+teremos criar diversas conexões de uma vez e isso nenhum banco de dados aguenta!
+
+A solução é deixar uma quantidade de conexão pronta (mesmo sem uso) ao subir a aplicação e quando o número de conexão em uso chegar
+perto da quantidade criada ele fará mais conexões. Quem faz essa quantidade inicial de conexão se chama Pool de Conexões e ele já vem
+pronto, ele é um arquivo JAR. Há diversos pools de conexões, neste exemplo estamos usando o C3P0. Ao adicionar o Pool de Conexão nossa
+aplicação ficará assim:
+
+	Classe com método main() <===> ConnectionFactory <===> Pool de Conexão <===> JDBC <===> Driver MySql <===> Banco de Dados.
+	
+Mas desta forma teremos um problema que é trocar o  Pool de Conexão, pois não há uma regra geral de como implementar
+o Poll de Conexão! Então para resolver isso vamos adicionar mais uma camada, no caso a DataSource.
+
+	Classe com método main() <===> ConnectionFactory <===> Data Source <===> Pool de Conexão <===> JDBC <===> Driver MySql <===> 
+	BD.
+	
+	
+Agora para fazer isso no código, siga os passos:
+
+1) No projeto clique com botão direito -> Build Path -> Configure Build Path -> e adicione os dois JAR do C3P0
+
+2) Na classe ConnectionFactory, vamos deixá-la assim:
+
+	public class ConnectionFactory {
+		
+		//Crio o DataSource
+		public DataSource dataSource;
+		
+		
+		public ConnectionFactory(){
+			//Definindo que toda instancia de ConnectionFactory vai criar um pool de conexao
+			//COnfiguramos o Pool de Conexao com os dados do banco de dados.
+			ComboPooledDataSource comboPooledDataSource = new ComboPooledDataSource();
+			comboPooledDataSource.setJdbcUrl("jdbc:mysql://localhost/loja_virtual?useTimezone=true&serverTimezone=UTC");
+			comboPooledDataSource.setUser("root");
+			comboPooledDataSource.setPassword("mysql");
+			
+			//Queremos que nossa aplicação se comunique com o DataSource e não com o  Pool diretamente!
+			this.dataSource = comboPooledDataSource;
+		}
+
+		public Connection recuperarConexao() throws SQLException {
+			return this.dataSource.getConnection();
+		}
+
+	}
+	
+Veja que criamos um atributo DataSource que vai receber o Pool de Conexão. No construtor de ConnectionFactory é onde criamos o 
+Pool de Conexão. E vamos sempre retornar o DataSource, pois queremos que nossa aplicação fale com o DataSource e não com o Poll
+diretamente!
+
+Podemos adicionar mais configuração no DataSource, veja:
+
+		//Quantidade máxima de conexão que fica disponível!
+		comboPooledDataSource.setMaxPoolSize(15);

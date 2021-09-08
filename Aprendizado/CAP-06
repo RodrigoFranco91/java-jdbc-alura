@@ -1,0 +1,183 @@
+Neste capítulo vamos falar sobre a camada de persistencia que é chamada de DAO. Para isso vamos criar a classe de modelo Produto.
+
+Siga o passo a passo:
+
+1) Vamos criar a classe de modelo de Produto:
+
+	public class Produto {
+		
+		private Integer id;
+		private String nome;
+		private String descricao;
+		
+		public Produto(String nome, String descricao) {
+			this.nome = nome;
+			this.descricao = descricao;
+		}
+
+		public Integer getId() {
+			return id;
+		}
+
+		public void setId(Integer id) {
+			this.id = id;
+		}
+
+		public String getNome() {
+			return nome;
+		}
+
+		public void setNome(String nome) {
+			this.nome = nome;
+		}
+
+		public String getDescricao() {
+			return descricao;
+		}
+
+		public void setDescricao(String descricao) {
+			this.descricao = descricao;
+		}
+		
+		
+		@Override
+		public String toString() {
+			return String.format("O produto criado foi: %d - %s - %s", this.id, this.nome, this.descricao);
+		}
+
+	}
+	
+2) Vamos criar uma classe de teste, chamada TestaInsercaoComProduto para fazer o cadastro:
+
+	public class TestaInsercaoComProduto {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			//Produto a ser salvo:
+			Produto comoda = new Produto("Cômoda", "Cômoda Vertical");
+			
+			try(Connection connection = new ConnectionFactory().recuperarConexao()){
+			
+				String sql = "INSERT INTO PRODUTO (NOME, DESCRICAO) VALUES (?,?)";
+				
+				try(PreparedStatement pst = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
+					
+					pst.setString(1, comoda.getNome());
+					pst.setString(2, comoda.getDescricao());
+					pst.execute();
+					
+					try(ResultSet rs = pst.getGeneratedKeys()){
+						while(rs.next()) {
+							comoda.setId(rs.getInt(1));
+						}
+					}
+					
+				}
+				
+			}
+			
+			System.out.println(comoda);
+			
+		}
+
+	}
+	
+Tenha em mente que usamos o try-with-resource para não precisar fechar a Connection, PreparedStatemente e ResultSet.
+
+
+
+Veja que para cada operação (INSERT, DELETE, SELECT) muito código se repete, sempre temos que criar a conexão, criar uma string que
+representa o SQL, criar um PreparedStatement, etc.. A seguir vamos melhorar isso, pois nunca é aceitavel repetir código!
+
+Vamos criar uma classe com a finalidade de persistir produto, vamos chamá-la de ProdutoDAO. DAO significa Data Access Object e é
+sempre uma classe para persistir (salvar, alterar, listar, deletar) um objeto. Siga o passo a passo:
+
+1) Crie a classe ProdutoDAO, nesta classe crie um atributo do tipo Connection e um construtor que receba uma Connection;
+
+2) Na classe ProdutoDAO crie um método chamado salvar() que receberá como argumento um objeto do tipo Produto;
+
+3) O método salvar() deve ter um código muito parecido com o da classe TestaInsercaoComProduto.
+
+4) Veja como ficou a classe:
+
+	public class ProdutoDAO {
+		
+		private Connection connection;
+		
+		public ProdutoDAO(Connection connection) {
+			this.connection = connection;
+		}
+		
+		public void salvar(Produto produto) throws SQLException {
+			
+			String sql = "INSERT INTO PRODUTO (NOME, DESCRICAO) VALUES (?,?)";
+			
+			try(PreparedStatement pst = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
+				
+				pst.setString(1, produto.getNome());
+				pst.setString(2, produto.getDescricao());
+				pst.execute();
+				
+				try(ResultSet rs = pst.getGeneratedKeys()){
+					while(rs.next()) {
+						produto.setId(rs.getInt(1));
+					}
+				}
+				
+			}
+			
+		}
+
+	}
+	
+5) Agora precisamos criar uma classe para testar ProdutoDao, ou seja, vai chamar o método salvar() de ProdutoDao. Veja:
+
+	public class TestaProdutoDAO {
+
+		public static void main(String[] args) throws SQLException {
+			
+			Produto comoda = new Produto("Cômoda", "Cômoda Vertical");
+
+			try (Connection connection = new ConnectionFactory().recuperarConexao()) {
+				ProdutoDAO persistenciaProduto = new ProdutoDAO(connection);
+				persistenciaProduto.salvar(comoda);
+			}
+		}
+	}
+
+
+
+Vamos agora criar um método para listar os produtos. O método será feito na classe ProdutoDAO. Siga o passo a passo:
+
+1) Na classe ProdutoDAO crei o método listar(), que não recebe nada e retorna uma Lista de Produto. Veja como ficou:
+
+	public List<Produto> listar() throws SQLException{
+		List<Produto> produtos = new ArrayList<>();
+		
+		String sql = "SELECT * FROM PRODUTO";
+		
+		try(PreparedStatement pst = connection.prepareStatement(sql)){
+			//Antes estavamosfazendo: pst.execute() e depois faziamos pst.getResultSet()
+			//Vamos usar o metodo executeQuery() que já retorna o ResultSet
+			try(ResultSet rs = pst.executeQuery()){
+				while(rs.next()) {
+					Produto produto = new Produto(rs.getString("NOME"), rs.getString("DESCRICAO"));
+					produto.setId(rs.getInt("ID"));
+					produtos.add(produto);
+				}
+			}
+		}
+		
+		return produtos;		
+	}
+	
+2) Na classe TestaProdutoDAO vamos chamar o método listar(), para isso dentro do try(){} foi adicionado as linhas:
+
+		List<Produto> produtos = dao.listar();
+		produtos.forEach(System.out::println); 
+		
+		
+
+Veja que o construtor da classe DAO recebe uma Connection, poderiamos criar essa Connection dentro do construtor sem argumento do 
+DAO, mas daí toda chamada a este DAO geraria uma nova Connection e as vezes vamos querer utilizar a classe DAO com uma connection já
+existente, para assim poder ter controle de transação!

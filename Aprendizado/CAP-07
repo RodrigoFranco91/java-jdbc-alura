@@ -1,0 +1,308 @@
+Neste capitulo vamos aprender como trabalhar com classe modelo que tem relação com outra classe. Agora classe Produto terá um atributo
+do tipo Categoria.
+
+
+Siga os passos:
+
+1) Temos que criar uma nova tabela no banco de dados chamada CATEGORIA com as colunas de ID e NOME. Para isso rode o comando:
+
+	CREATE TABLE CATEGORIA(ID INT AUTO_INCREMENT, NOME VARCHAR(50) NOT NULL, PRIMARY KEY(ID)) Engine = InnoDB;
+	
+2) Vamos povoar essa nova tabela, rodamos os comandos:
+
+	INSERT INTO CATEGORIA (NOME) VALUES ('ELETRONICOS');
+	INSERT INTO CATEGORIA (NOME) VALUES ('ELETRODOMESTICOS');
+	INSERT INTO CATEGORIA (NOME) VALUES ('MOVEIS');
+	
+3) Agora temos que criar um vinculo entre tabela PRODUTO com CATEGORIA, no caso um PRODUTO tem uma CATEGORIA e CATEGORIA pode ter
+vários PRODUTOS, logo o lado N da relação é a tabela PRODUTO e por isso essa tabela receberá uma chave estrangeira que será o ID de uma
+categoria. 
+
+4) Criando a coluna CATEOGIRA_ID na tabela PRODUTO:
+
+	ALTER TABLE PRODUTO ADD COLUMN CATEGORIA_ID INT;
+	
+5) Fazendo a coluna CATEGORIA_ID ser um foreign key (chave estrangeiera) que referencia a chave primária de CATEGORIA:
+
+	ALTER TABLE PRODUTO ADD COLUMN CATEGORIA_ID INT;
+	
+6) Agora basta atualizar os valores salvos na tabela PRODUTO para que cada produto tenha uma CATEGORIA. Para isso rodamos os comandos:
+
+	UPDATE PRODUTO SET CATEGORIA_ID = 1 WHERE id = 1;
+	INSERT INTO PRODUTO(NOME,DESCRICAO, CATEGORIA_ID) VALUES ('GELADEIRA', 'GELADEIRA AZUL', 2);
+	INSERT INTO PRODUTO(NOME,DESCRICAO, CATEGORIA_ID) VALUES ('COMODA', 'COMODA VERTICAL', 3);
+	
+	
+Agora temos que criar a classe modelo que representa Categoria. Siga os passos:
+
+1) Crie a classe Categoria com os atributos id e nome, veja:
+
+	public class Categoria {
+		
+		private Integer id;
+		private String nome;
+		
+		public Categoria(String nome) {
+			this.nome = nome;
+		}
+		
+		public Integer getId() {
+			return id;
+		}
+		public void setId(Integer id) {
+			this.id = id;
+		}
+		public String getNome() {
+			return nome;
+		}
+		public void setNome(String nome) {
+			this.nome = nome;
+		}
+		
+	}
+
+2) Crie a classe CategoriaDAO (A princípo teremos metodo listar() e salvar(). Veja como ficará:
+
+	public class CategoriaDAO {
+		
+		private Connection connection;
+		
+		public CategoriaDAO(Connection connection) {
+			
+			this.connection = connection;
+		}
+
+		public void salvar(Categoria categoria) throws SQLException {
+			
+			String sql = "INSERT INTO CATEGORIA (NOME) VALUES (?)";
+			
+			try(PreparedStatement pst =  connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
+				pst.setString(1, categoria.getNome());
+				pst.execute();
+				
+				try(ResultSet rs = pst.getGeneratedKeys()){
+					while(rs.next()) {
+						Integer id = rs.getInt(1);
+						System.out.println("Produto cadastrado com id: " + id);
+					}
+				}
+				
+			}
+			
+		}
+		
+		public List<Categoria> lsitar() throws SQLException{
+			
+			List<Categoria> categorias = new ArrayList<>();
+			
+			String sql = "SELECT * FROM CATEGORIA";
+			
+			try(PreparedStatement pst = connection.prepareStatement(sql)){
+				pst.execute();
+				
+				try(ResultSet rs = pst.getResultSet()){
+					while(rs.next()) {
+						Categoria categoria = new Categoria(rs.getString("NOME"));
+						categorias.add(categoria);
+					}
+				}
+			}
+			
+			return categorias;
+		}
+		
+	}
+	
+3) Agora vamos criar uma classe para testar a CategoriaDAO, chamamos essa de TestaCategoriaDAO:
+
+	public class TestaCategoriaDAO {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory connectionFactory = new ConnectionFactory();
+			
+			try(Connection connection = connectionFactory.recuperarConexao()){
+				CategoriaDAO dao = new CategoriaDAO(connection);
+				Categoria categoria = new Categoria("Celular");
+				dao.salvar(categoria);
+				List<Categoria> categorias = dao.lsitar();
+				categorias.forEach(c -> System.out.println(c.getNome()));
+			}
+			
+		}
+	}
+	
+	
+	
+Vamos falar sobre as Queries N+1, ou seja, vamos agora de fato usar o relacionamento entre as tabelas.
+Para representar o problema que é Querie N+1 vamos implementar a solução para o cenário: Ao exibir uma categoria na listagem devemos
+mostrar todos produtos daquela categoria. Siga o passo a passo para fazer isso, lembrando que a primeira resolução terá o problema
+de Querie 1+n e a segunda solução será a melhor! 
+
+Passo a passo solução 1:
+
+1) Na classe ProdutoDAO crei o método listarPorCategoria(), esse método vai receber uma Categoria e irá retornar uma lista de
+produto. Veja como vai ficar:
+
+	public List<Produto> listarPorCategoria(Categoria categoria) throws SQLException{
+		List<Produto> produtos = new ArrayList<>();
+		
+		String sql = "SELECT * FROM PRODUTO WHERE CATEGORIA_ID = ?";
+		
+		try(PreparedStatement pst = connection.prepareStatement(sql)){
+			
+			pst.setInt(1, categoria.getId());
+			
+			//Antes estavamosfazendo: pst.execute() e depois faziamos pst.getResultSet()
+			//Vamos usar o metodo executeQuery() que já retorna o ResultSet
+			try(ResultSet rs = pst.executeQuery()){
+				while(rs.next()) {
+					Produto produto = new Produto(rs.getString("NOME"), rs.getString("DESCRICAO"));
+					produto.setId(rs.getInt("ID"));
+					produtos.add(produto);
+				}
+			}
+		}
+		
+		return produtos;		
+	}
+	
+2) Agora na classe TestaCategoriaDAO, no momento que listamos as Categorias vamos pegar cada uma e chamar o método 
+listarPorCategoria(), veja:
+
+	public class TestaCategoriaDAO {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory connectionFactory = new ConnectionFactory();
+			
+			try(Connection connection = connectionFactory.recuperarConexao()){
+				CategoriaDAO dao = new CategoriaDAO(connection);
+				Categoria categoria = new Categoria("Celular");
+				dao.salvar(categoria);
+				List<Categoria> categorias = dao.lsitar();
+				categorias.forEach(c -> {
+					System.out.println(c.getNome() + " :");
+					try {
+						for(Produto produto : new ProdutoDAO(connection).listarPorCategoria(c)) {
+							System.out.println(produto);
+						}
+					} catch (SQLException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				});
+			}
+			
+		}
+	}
+	
+O problema dessa abordagem (Querie 1+n) é a quantidade de acesso ao banco de dados que temos que fazer para essa listagem.
+Foi um acesso para pegar todas as categorias e depois um acesso para cada produto que está dentro da categoria. Muito acesso ao
+banco é perigoso, pois derruba o banco de dados!
+
+
+Passo a passo solução 2 (Usando INNER JOIN):
+
+1) Criar o relacionamento na classe, ou seja, na classe Produto criamos um atributo do tipo Categoria. Poderiamos também criar na
+classe Categoria um atributo do tipo List de Produto. Veja como fizemos:
+
+	public class Produto {
+		
+		private Integer id;
+		private String nome;
+		private String descricao;
+		private Categoria categoria;
+		
+		public Produto(String nome, String descricao) {
+			this.nome = nome;
+			this.descricao = descricao;
+		}
+
+		public Integer getId() {
+			return id;
+		}
+
+		public void setId(Integer id) {
+			this.id = id;
+		}
+
+		public String getNome() {
+			return nome;
+		}
+
+		public void setNome(String nome) {
+			this.nome = nome;
+		}
+
+		public String getDescricao() {
+			return descricao;
+		}
+
+		public void setDescricao(String descricao) {
+			this.descricao = descricao;
+		}
+			
+		public Categoria getCategoria() {
+			return categoria;
+		}
+		
+		public void setCategoria(Categoria categoria) {
+			this.categoria = categoria;
+		}
+		
+		@Override
+		public String toString() {
+			return String.format("O produto criado foi: %d - %s - %s - Categoria: %s", this.id, this.nome, 
+			this.descricao, this.categoria.getNome());
+		}
+
+	}
+
+2) Na classe CategoriaDAO fizemos o método lsitarCategoriaEProduto() que não recebe nada e retorna uma lista de Produto (que terá
+uma categoria). Para isso funcionar usamos o comando SELECT com INNER JOIN. Veja:
+
+	public List<Produto> lsitarCategoriaEProduto() throws SQLException{
+		
+		List<Produto> produtos = new ArrayList<>();
+		
+		String sql = "SELECT * FROM CATEGORIA C INNER JOIN PRODUTO P ON C.ID LIKE P.CATEGORIA_ID";
+		
+		try(PreparedStatement pst = connection.prepareStatement(sql)){
+			pst.execute();
+			
+			try(ResultSet rs = pst.getResultSet()){
+				while(rs.next()) {
+					Categoria categoria = new Categoria(rs.getString("C.NOME"));
+					categoria.setId(rs.getInt("C.ID"));
+					Produto produto = new Produto(rs.getString("P.NOME"), rs.getString("P.NOME"));
+					produto.setId(rs.getInt("P.ID"));
+					produto.setCategoria(categoria);
+					produtos.add(produto);
+				}
+			}
+		}
+		
+		return produtos;
+	}
+	
+3) Na classe testaCategoriaDAO testamos essa consulta, veja:
+
+	public class TestaCategoriaDAO {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory connectionFactory = new ConnectionFactory();
+			
+			try(Connection connection = connectionFactory.recuperarConexao()){
+				CategoriaDAO dao = new CategoriaDAO(connection);
+				Categoria categoria = new Categoria("Celular");
+				dao.salvar(categoria);
+				List<Produto> produtosComCategoria = dao.lsitarCategoriaEProduto();
+				produtosComCategoria.forEach(System.out::println);
+			}
+			
+		}
+	}
+	
+Tenha em mente que usando INNER JOIN tivemos o mesmo resultado que antes, só que apenas um acesso (conexão) ao banco!

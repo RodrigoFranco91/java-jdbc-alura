@@ -1,0 +1,111 @@
+Neste capítulo falamos como evitar o SQL Injection.
+
+
+Veja a  classe TestaInsercao, ela está funcionando normalmente, mas os dados a serem inseridos estão "chumbados", não são dinamicos. 
+Se quisessemos tornar dinamico seria facil, bastaria ler o valor desejado e concatenar na string que representa o SQL, mas isso é 
+PERIGOSO, pois imagina o usuário informando seu nome, mas ele usa o simbolo de aspas, vamos concaternar uma aspas na string e isso
+abre brecha pra ele fechar o nosso comando e criar um comando diferente de SQL, ou seja, o usuário passa a ter a possibilidade de
+executar um outro comando SQL, isso se chama SQL Injection.
+
+Para tratar/evitar a SQL Injection poderiamos fazer diversos IF's, ou seja recursar tudo que tem ponto-e-virgula, ou aspas, mas isso
+não é viável! O JDBC tem a solução! No lugar de criar um Statement vamos preparar um Statement
+
+No lugar de usar o método createStatement() vamos usar o preparedStatement().
+
+Veja como ficou a inserção :
+
+	public class TestaInsercaoComPreparedStatement {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory criaConexao = new ConnectionFactory();
+			Connection connection = criaConexao.recuperarConexao();
+			
+			//Criamos um PrepareStatment com o comando INSERT. Veja que os valores são representados por INTERROGAÇÃO.
+			//O segundo argumento do metodo execute faz retornar o ID do item criado/salvo.
+			PreparedStatement pst = connection.prepareStatement("INSERT INTO PRODUTO(NOME, DESCRICAO) VALUES(?, ?)", 
+			Statement.RETURN_GENERATED_KEYS);
+
+			//Terminar de preparar o PreparedStatement. Vamos trocar as INTERROGAÇÕES por VALORES
+			//O primeiro argumento representa o index (posição) da interrogação. O segundo argumento é o valor.
+			pst.setString(1, "Mouse");
+			pst.setString(2, "Mouse sem fio");
+			
+			//Executando o PreparedStatement
+			pst.execute();
+			
+			//Pegando o ID do item criado
+			ResultSet rs = pst.getGeneratedKeys();
+			while(rs.next()) {
+				//Pegando o valor via index.
+				Integer id = rs.getInt(1);
+				System.out.println("Foi criado o produto com id: " + id);
+			}
+			
+		}
+
+	}
+	
+	
+Veja como ficou a consulta :
+	
+	public class TestaListagemComPreparedStatement {
+		
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory criaConexao = new ConnectionFactory();
+			Connection connection = criaConexao.recuperarConexao();
+			
+			//Preparando o comando SELECT
+			PreparedStatement pst = connection.prepareStatement("SELECT ID, NOME, DESCRICAO FROM PRODUTO");
+
+			//Executando o comando
+			pst.execute();
+			
+			//Pegando o resultado
+			ResultSet rst = pst.getResultSet();
+			
+			//Listando os itens que foi retornado na consulta. Sempre verificamos se há o próximo
+			while(rst.next()) {
+				//Podemos acessar valor da coluna via index ( começa em 1) ou pelo nome da coluna.
+				Integer id = rst.getInt("ID");
+				String nome = rst.getString("NOME");
+				String descricao = rst.getString("DESCRICAO");
+				
+				System.out.println(id + " " + nome + " " + descricao );
+			}
+			
+			//Fecha a Conexão
+			connection.close();
+			
+		}
+		
+	}	
+	
+Veja como ficou a deleção :
+
+	public class TestaRemocaoComPreparedStatement {
+
+		public static void main(String[] args) throws SQLException {
+			
+			ConnectionFactory criaConexao = new ConnectionFactory();
+			Connection connection = criaConexao.recuperarConexao();
+			
+			//Preparando comando DELETE
+			PreparedStatement pst = connection.prepareStatement("DELETE FROM PRODUTO WHERE id > 1");
+
+			//Executando o comando
+			pst.execute();
+			
+			//Verifica quantas linhas (itens) foram alterados/deletados após executar Statement.
+			Integer contador = pst.getUpdateCount();
+			System.out.println("Foram deletados " + contador + " produtos.");
+			
+			//FEchando conexão
+			connection.close();
+			
+		}
+		
+	}
+	
+	
